@@ -1,0 +1,308 @@
+#NoEnv  ; Recommended for performance and compatibility with future AutoHotkey releases.
+; #Warn  ; Enable warnings to assist with detecting common errors.
+SendMode Input  ; Recommended for new scripts due to its superior speed and reliability.
+SetWorkingDir %A_ScriptDir%  ; Ensures a consistent starting directory.
+
+#SingleInstance force ;running program will overwrite old versions without pop up
+
+;AHK Hot Key Program
+;Created by: Matthew Avery Braun Soule
+
+
+;CTRL Escape error script
+;Anything goes wrong, press ALT escape to stop the script
+
+ALT & Escape::
+MsgBox, Exiting AHK Script
+BlockInput, MouseMoveOff
+ExitApp
+Return
+
+
+;Convert SLT files to IGESS
+
+#If WinActive("ahk_class CabinetWClass")
+ALT & J::
+
+	;Declarations
+	StartTime :=
+	ElapsedTime := 
+	RepositoryPath :=
+
+	
+;Main
+	
+	openConfig(StartTime)
+
+	getFolder()
+	
+	createRepository(RepositoryPath)
+	
+	openSolidworks()
+	
+	convert(RepositoryPath)
+	
+	closeConfig(StartTime)
+	
+;Functions
+	
+	openConfig(ByRef StartTime)
+	{
+			;Measure execution time
+			StartTime := A_TickCount
+			
+			SetTitleMatchMode, 2 ;matching configuration for whole script
+	}
+	
+	getFolder()
+	{
+		;Get file path
+		clipboard = ;Empty clipboard
+		SendInput, ^c ;Send keystrokes
+		clipboard := clipboard
+		sleep, 500 ;pause to ensure if auto copy file path has completed executing
+		IfNotInString, clipboard, \
+		{
+			MsgBox, Please copy a valid filepath to the clipboard (On desired file: Shift + Right Click, then select "Copy as path" and press Ok) 
+		}
+		ClipWait ;wait for clipboard to contain text
+		Clipboard := Clipboard
+		MsgBox, Filepath selected is %clipboard%
+		folderPath = %clipboard%
+		
+		IfEqual, clipboard, ""		;If no folder path is selected, exit. This code should never run due to the ClipWait command
+		{
+			MsgBox, Folder Not Found! Script will exit.
+			Exit
+		}
+	
+		;Set working Directory
+			SetWorkingDir, %folderPath%
+	}
+	
+	createRepository(ByRef RepositoryPath)
+	{
+			IfNotExist, c:\Users\%A_Username%\Desktop\SLD_to_IGESS_%A_Now% 		;Should never be false due to time stamp
+			{
+			;Communicate with user
+			MsgBox Creating new "SLD_to_IGESS_%A_Now%" folder in c:\Users\%A_Username%\Desktop 
+			
+			;Open explorer 
+			explorerPath = C:\Users\%A_Username%\Desktop
+			Run, explore %explorerPath%
+			WinWaitActive, Desktop
+			
+			;Create directory
+			NowVar = %A_Now%
+			RepositoryPath = C:\Users\%A_Username%\Desktop\SLD_to_IGESS_%NowVar%
+			RepositoryName = SLD_to_IGESS_%NowVar%
+			SendInput, ^+n
+			Sleep, 250
+			SendInput, %RepositoryName%
+			Sleep, 250
+			SendInput, {Enter}
+			
+			;Close Window
+			WinClose
+			}
+	}
+	
+	openSolidworks()
+	{
+		MsgBox, Please navigate prompts to configure Solidworks to its home display
+		
+		IfWinNotExist, , swCaption ;check if solidworks' main menu is active
+		{
+			SendInput {LWIN}
+			WinWaitActive, Start menu ;wait for start menu to activate
+			SendInput solidworks
+			SendInput {Enter}
+		}
+		Else
+		{
+			WinActivate, , swCaption
+		}
+		
+		;Wait until program is properly configured
+		SetTitleMatchMode, 2  ; To be sure its set in function
+		WinWaitActive, , swCaption ;wait for solidworks main menu to activate
+		MsgBox Solidworks is configured! Please press Ok to continue the program execution. If you require to exit the scripting tool at any point, press Alt + Esc 
+	}
+	
+	convert(ByRef RepositoryPath)
+	{
+		;Declarations
+		nameArray := Object()
+		
+		extensions = "SLDPRT,SLDASM,sldprt,sldasm"
+		fileCount = 0
+		SWfileCount = 0
+		
+		Loop %A_WorkingDir%\*		 ;Loop through all files in selected folder
+		{
+			StringCaseSense, Off		;ensure case sensitivity is not on	
+			
+			if A_LoopFileExt in %extensions%		 ;Only run on valid file types
+			{	
+				;Open file
+					PopUpHander4()		;Ensure no error messages are present
+					
+					run %A_LoopFileFullPath%
+					
+				;Remove file extension for WinWaitActive command
+					nameString = %A_LoopFileName%
+					nameArray := StrSplit( nameString, ".")
+					nameString = % nameArray[1]
+				
+				;Wait for file to open
+					WinWaitActive, %nameString% 	
+					MsgBox, 0, , %A_LoopFileName% has opened!, 1
+				
+				PopUpHandler() 		;Handle popup dialogues 
+			
+				PopUpHander1() 		;Handle popup dialogues 
+				
+				;Save As IGESS file type
+					WinWaitActive, , swCaption
+					Sleep 500
+					SendInput {ALT}
+					Sleep 500
+					SendInput {Enter}
+					Sleep 500
+					SendInput {Down}{Down}{Down}{Down}{Down}{Down}{Down}
+					Sleep 100
+					SendInput {Enter}
+					
+					;Configure Save As Preferences
+					WinWaitActive, Save As 		;Wait for window to open
+					BlockInput, MouseMove		;Disable users mouse movements 
+						;Change file type
+							Sleep 500 ;Test block input command
+							ControlGetPos, X, Y, W, H, ComboBox2, Save As ahk_class #32770
+							mousemove, x+w/2+100,y+h/2, 10
+							Sleep 100
+							Click
+							SendInput i 		;select  IGESS
+							SendInput {Enter}
+						
+						;Change filepath
+							BlockInput, MouseMove
+							Sleep 500 ;Test block input command
+							ControlFocus, ToolbarWindow323, A		;A for active
+							Sleep 10
+							SendInput {Space}
+							Sleep 10
+							SendInput %RepositoryPath%
+							Sleep 10
+							SendInput {Enter}
+					
+						;Save File
+							BlockInput, MouseMove
+							Sleep 500 ;Test block input command
+							ControlFocus, Button18, A		;A for active
+							Sleep 10
+							SendInput {Enter}
+							BlockInput, MouseMoveOff
+							WinWaitClose,  Save As 
+						
+						PopUpHandler3()		;Handle popup dialogues CAN LIKELY REMOVE
+							
+							
+						;Close Window
+							WinWaitActive, , swCaption
+							SendInput {Esc}{Esc} 		;exit top menu selection
+							SendInput {Ctrl Down}w{Ctrl Up}			;close window
+							
+							
+						PopUpHandler3()		;Handle popup dialogues 
+						
+			}	
+		}
+	}
+	
+	closeConfig(ByRef StartTime)
+	{
+		;Measure execution time
+		ElapsedTime := (A_TickCount - StartTime)/1000
+		Sleep, 1000
+		MsgBox,  Files successfully converted after %ElapsedTime% seconds.
+		return
+	}
+
+	PopUpHandler()
+	{
+		;Handle Part Checkout Dialogue
+		IfWinExist, SOLIDWORKS PDM
+		{
+			WinActivate, SOLIDWORKS PDM
+			WinWaitActive, SOLIDWORKS PDM, , 1
+			SendInput {Right}
+			Sleep 10
+			SendInput {Enter}
+			WinWaitClose, SOLIDWORKS PDM, , 2
+		}
+	}
+		
+	PopUpHander1() 	
+	{
+		;Handle Rebuild Dialogue
+		WinWait, , &Rebuild, 3
+		{
+			WinActivate, , &Rebuild
+			WinWaitActive, , &Rebuild , 1
+			SendInput {Enter}
+			WinWaitClose, , &Rebuild , 2
+		}
+	}
+		
+	PopUpHandler2() 
+	{
+		IfWinExist, Save Modified Documents
+		{
+			WinActivate, Save Modified Documents
+			WinWaitActive, Save Modified Documents, , 1
+			SendInput {Enter}
+			WinWaitClose, Save Modified Documents, , 2
+		}
+	}
+		
+	PopUpHandler3()
+	{
+		WinWaitActive, Save Modified Documents, , 3
+		{
+			WinActivate, Save Modified Documents
+			WinWaitActive, Save Modified Documents , , 1
+			
+			BlockInput, MouseMove		;Disable users mouse movements 
+				ControlGetPos, X, Y, W, H, Button3, Save Modified Documents ahk_class #32770
+				mousemove, x+w/2+100,y+h/2, 10
+				Sleep 100
+				Click
+			BlockInput, MouseMoveOff
+			WinWaitNotActive, Save Modified Documents , , 2
+		}
+	}
+		
+	PopUpHander4()
+	{
+		IfWinExist, swShellFileLauncher
+			{
+				WinActivate, swShellFileLauncher
+				WinWaitActive, swShellFileLauncher , , 2
+				SendInput {Enter}
+				WinWaitNotActive, swShellFileLauncher , , 2
+			}
+	}
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+		
+	
